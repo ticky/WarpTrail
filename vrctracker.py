@@ -12,6 +12,7 @@ from dateutil.parser import parse as parse_date
 from dateutil.utils import default_tzinfo
 from dateutil.tz import gettz
 import psutil
+import pystray
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
@@ -190,10 +191,46 @@ class FileCreatedEventHandler(FileSystemEventHandler):
         # TODO: This should be its own thread so the Observer can continue its work
         self.app.follow_log(event.src_path, vrchat_process)
 
+def setup(icon):
+    icon.visible = True
+
+    app = VRCTrackerApp()
+    app.run()
+
+from PIL import Image, ImageDraw
+
+def create_image(width, height, color1, color2):
+    # Generate an image and draw a pattern
+    image = Image.new('RGB', (width, height), color1)
+    dc = ImageDraw.Draw(image)
+    dc.rectangle(
+        (width // 2, 0, width, height // 2),
+        fill=color2)
+    dc.rectangle(
+        (0, height // 2, width // 2, height),
+        fill=color2)
+
+    return image
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s: %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S')
 
-    app = VRCTrackerApp()
-    app.run()
+    def on_clicked(icon, item):
+        # nothing
+        return
+
+    # TODO: Load image from file, embed in built exe
+    icon = pystray.Icon('VRCTracker',
+                        icon=create_image(64, 64, 'black', 'white'),
+                        title='VRCTracker',
+                        menu=pystray.Menu(
+                            pystray.MenuItem('Export Location History...',
+                                             on_clicked),
+                            pystray.Menu.SEPARATOR,
+                            pystray.MenuItem('Exit',
+                                             on_clicked)
+                        ))
+
+    icon.run(setup=setup)
