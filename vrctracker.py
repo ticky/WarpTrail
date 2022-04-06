@@ -9,6 +9,8 @@ import re
 from appdirs import AppDirs
 from datetime import datetime
 from dateutil.parser import parse as parse_date
+from dateutil.utils import default_tzinfo
+from dateutil.tz import gettz
 import psutil
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -104,7 +106,7 @@ class VRCTrackerApp:
                 # Gather world IDs from Joining messages
                 match = re.search('([0-9\.]+ [0-9:]+).+Joining (wrld_[0-9a-f\-]{36})', line)
                 if match != None:
-                    date = parse_date(match.group(1))
+                    date = default_tzinfo(parse_date(match.group(1)), gettz())
                     world_id = match.group(2)
 
                     self.logger.info("Entered world %s at %s", world_id, date.isoformat())
@@ -140,18 +142,18 @@ class VRCTrackerApp:
                 # Gather player names from OnPlayerJoined/Left events
                 match = re.search('([0-9\.]+ [0-9:]+).+OnPlayerJoined (.+)', line)
                 if match != None:
-                    date = parse_date(match.group(1))
+                    date = default_tzinfo(parse_date(match.group(1)), gettz())
                     self.logger.info("Player \"%s\" Joined, at %s", match.group(2), date.isoformat())
 
                 match = re.search('([0-9\.]+ [0-9:]+).+OnPlayerLeft (.+)', line)
                 if match != None:
-                    date = parse_date(match.group(1))
+                    date = default_tzinfo(parse_date(match.group(1)), gettz())
                     self.logger.info("Player \"%s\" Left, at %s", match.group(2), date.isoformat())
         
             # Update any unresolved checkins to the previous world to have ended
             db.execute(
                 "UPDATE checkins SET end_datetime = :end_datetime WHERE world_id = :world_id AND end_datetime IS NULL",
-                {"end_datetime": datetime.now().isoformat(), "world_id": world_id}
+                {"end_datetime": default_tzinfo(datetime.now(), gettz()).isoformat(), "world_id": world_id}
             )
             db_conn.commit()
 
