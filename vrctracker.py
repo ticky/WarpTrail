@@ -4,6 +4,7 @@ import os
 import time
 import logging
 import sqlite3
+import sys
 import re
 
 from appdirs import AppDirs
@@ -11,10 +12,15 @@ from datetime import datetime
 from dateutil.parser import parse as parse_date
 from dateutil.utils import default_tzinfo
 from dateutil.tz import gettz
+from PIL import Image
 import psutil
 import pystray
+from threading import Thread, Event as ThreadingEvent
+from tkinter import filedialog, messagebox
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+
+APP_EMBEDDED = getattr(sys, 'frozen', False)
 
 DB_SCHEMA = '''
 PRAGMA foreign_keys = ON;
@@ -44,6 +50,41 @@ CREATE TABLE IF NOT EXISTS visitors (
 CREATE UNIQUE INDEX visitors_world_id_name_time_unique ON visitors(world_id, name, start_datetime); 
 '''
 
+EXPORT_FILETYPES = [('Markdown',   '.md'),
+                    ('Plain Text', '.txt'),
+                    ('JSON Data',  '.json')]
+
+class FileCreatedEventHandler(FileSystemEventHandler):
+    def __init__(self, app, logger=None):
+        super().__init__()
+
+        self.app = app
+        self.logger = logger or logging.root
+
+    def on_created(self, event):
+        super().on_created(event)
+        
+        if event.is_directory:
+            return
+
+        relpath = os.path.relpath(event.src_path, self.app.vrchat_data_dir)
+
+        if not relpath.startswith("output_log"):
+            return
+
+        self.logger.info("VRChat log file detected: %s", relpath)
+
+        vrchat_process = None
+        for process in psutil.process_iter(['name']):
+            if process.info['name'] == "VRChat.exe":
+                vrchat_process = process
+                break
+
+        self.logger.info("VRChat process detected: %d", vrchat_process.pid)
+
+        Thread(target=self.app.follow_log_file,
+               args=(event.src_path, vrchat_process)).start()
+
 class VRCTrackerApp:
     def __init__(self, logger=None):
         self.logger = logger or logging.root
@@ -72,8 +113,95 @@ class VRCTrackerApp:
             db.executescript(DB_SCHEMA)
             db_conn.commit()
             self.logger.info("database ready")
-    
+
+        if APP_EMBEDDED:
+            iconimage = Image.open(os.path.join(sys._MEIPASS, "resources/vrctracker.ico"))
+        else:
+            iconimage = Image.open("resources/vrctracker.ico")
+
+        self.icon = pystray.Icon('VRCTracker',
+                                 icon=iconimage,
+                                 title='VRCTracker',
+                                 menu=pystray.Menu(
+                                     pystray.MenuItem('Export Location History...',
+                                                      self.on_export),
+                                     pystray.Menu.SEPARATOR,
+                                     pystray.MenuItem('Exit',
+                                                      self.on_exit)
+                                 ))
+
+    def on_export(self, icon, item):
+        outfilename = filedialog.asksaveasfilename(title='Save VRChat Location History',
+                                                   initialfile='VRCTracker History',
+                                                   filetypes=EXPORT_FILETYPES,
+                                                   defaultextension=EXPORT_FILETYPES)
+
+        (_, extension) = os.path.splitext(outfilename)
+
+        self.logger.info("Saving location history as %s, with format %s", outfilename, extension)
+
+        with open(outfilename, mode='w', encoding='utf-8') as output_file:
+            db_conn = sqlite3.connect(self.database_path)
+            db = db_conn.cursor()
+
+            # TODO: Gracefully handle errors fetching from database
+            if extension == '.md':
+                result = db.execute("""
+                    SELECT '- [' || ifnull(worlds.name, worlds.id) || '](https://vrch.at/' || worlds.id || ')  \n  from ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.start_datetime), '(unknown)') || ' until ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.end_datetime), '(unknown)')
+                    FROM checkins
+                    INNER JOIN worlds
+                    ON checkins.world_id = worlds.id
+                """).fetchall()
+                
+                self.logger.info("History: {}".format(result))
+
+                output_file.write("# VRCTracker Location History\n\n")
+                output_file.writelines("{}\n".format(row[0]) for row in result)
+
+            elif extension == '.txt':
+                result = db.execute("""
+                    SELECT ifnull(worlds.name, worlds.id) || ' (https://vrch.at/' || worlds.id || '), from ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.start_datetime), '(unknown)') || ' until ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.end_datetime), '(unknown)')
+                    FROM checkins
+                    INNER JOIN worlds
+                    ON checkins.world_id = worlds.id
+                """).fetchall()
+                
+                self.logger.info("History: {}".format(result))
+
+                output_file.writelines("{}\n".format(row[0]) for row in result)
+
+            elif extension == '.json':
+                result = db.execute("""
+                    SELECT json_group_array(json_object(
+                        'world_name', worlds.name, 
+                        'world_url', 'https://vrch.at/' || worlds.id,
+                        'start_datetime', checkins.start_datetime,
+                        'end_datetime', checkins.end_datetime 
+                    ))
+                    FROM checkins
+                    INNER JOIN worlds
+                    ON checkins.world_id = worlds.id
+                """).fetchone()
+
+                output_file.write(result[0])
+            else:
+                messagebox.showerror(title='VRCTracker',
+                                    message="Unexpected file extension: {}".format(extension))
+            
+            db_conn.commit()
+
+
+    def on_exit(self, icon, item):
+        self.stop_event.set()
+        icon.stop()
+
     def run(self):
+        self.stop_event = ThreadingEvent()
+        self.icon.run(setup=self.pystray_setup)
+
+    def pystray_setup(self, icon):
+        icon.visible = True
+
         event_handler = FileCreatedEventHandler(self, self.logger)
         observer = Observer()
         observer.schedule(event_handler, self.vrchat_data_dir)
@@ -81,25 +209,33 @@ class VRCTrackerApp:
 
         try:
             while True:
+                if self.stop_event.is_set():
+                    observer.stop()
+                    break
+
                 time.sleep(1)
         except KeyboardInterrupt:
             observer.stop()
 
         observer.join()
 
-    def follow_log(self, path, responsible_process):
+    def follow_log_file(self, path, responsible_process):
         # https://medium.com/@aliasav/how-follow-a-file-in-python-tail-f-in-python-bca026a901cf
         with open(path, mode='r', encoding='utf-8', errors='ignore') as input_file:
             db_conn = sqlite3.Connection(self.database_path)
             db = db_conn.cursor()
             world_id = None
-            while responsible_process != None and responsible_process.is_running():
+
+            while not self.stop_event.is_set():
                 line = input_file.readline()
 
                 if not line:
+                    if responsible_process == None or not responsible_process.is_running():
+                        break
+
                     time.sleep(0.1)
                     continue
-                
+
                 last_world_id = world_id
 
                 # Regexes inspired by https://github.com/sunasaji/VRC_log_checker
@@ -158,79 +294,12 @@ class VRCTrackerApp:
             )
             db_conn.commit()
 
-            self.logger.info("VRChat process exited; done processing %s", path)
-
-class FileCreatedEventHandler(FileSystemEventHandler):
-    def __init__(self, app, logger=None):
-        super().__init__()
-
-        self.app = app
-        self.logger = logger or logging.root
-
-    def on_created(self, event):
-        super().on_created(event)
-        
-        if event.is_directory:
-            return
-
-        relpath = os.path.relpath(event.src_path, self.app.vrchat_data_dir)
-
-        if not relpath.startswith("output_log"):
-            return
-
-        self.logger.info("VRChat log file detected: %s", relpath)
-
-        vrchat_process = None
-        for process in psutil.process_iter(['name']):
-            if process.info['name'] == "VRChat.exe":
-                vrchat_process = process
-                break
-
-        self.logger.info("VRChat process detected: {}".format(vrchat_process))
-
-        # TODO: This should be its own thread so the Observer can continue its work
-        self.app.follow_log(event.src_path, vrchat_process)
-
-def setup(icon):
-    icon.visible = True
-
-    app = VRCTrackerApp()
-    app.run()
-
-from PIL import Image, ImageDraw
-
-def create_image(width, height, color1, color2):
-    # Generate an image and draw a pattern
-    image = Image.new('RGB', (width, height), color1)
-    dc = ImageDraw.Draw(image)
-    dc.rectangle(
-        (width // 2, 0, width, height // 2),
-        fill=color2)
-    dc.rectangle(
-        (0, height // 2, width // 2, height),
-        fill=color2)
-
-    return image
+            self.logger.info("Stopped processing %s", path)
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s: %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S')
 
-    def on_clicked(icon, item):
-        # nothing
-        return
-
-    # TODO: Load image from file, embed in built exe
-    icon = pystray.Icon('VRCTracker',
-                        icon=create_image(64, 64, 'black', 'white'),
-                        title='VRCTracker',
-                        menu=pystray.Menu(
-                            pystray.MenuItem('Export Location History...',
-                                             on_clicked),
-                            pystray.Menu.SEPARATOR,
-                            pystray.MenuItem('Exit',
-                                             on_clicked)
-                        ))
-
-    icon.run(setup=setup)
+    app = VRCTrackerApp()
+    app.run()
