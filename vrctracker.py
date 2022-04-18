@@ -160,6 +160,61 @@ class VRCTrackerApp:
             ),
         )
 
+    def format_as(self, extension, output_file):
+        db_conn = sqlite3.connect(self.database_path)
+        db = db_conn.cursor()
+
+        # TODO: Gracefully handle errors fetching from database
+        if extension == ".md":
+            result = db.execute(
+                """
+                SELECT '- [' || ifnull(worlds.name, worlds.id) || '](https://vrch.at/' || worlds.id || ')  \n  from ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.start_datetime), '(unknown)') || ' until ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.end_datetime), '(unknown)')
+                FROM checkins
+                INNER JOIN worlds
+                ON checkins.world_id = worlds.id
+            """
+            ).fetchall()
+
+            self.logger.info("History: {}".format(result))
+
+            output_file.write("# VRCTracker Location History\n\n")
+            output_file.writelines("{}\n".format(row[0]) for row in result)
+
+        elif extension == ".txt":
+            result = db.execute(
+                """
+                SELECT ifnull(worlds.name, worlds.id) || ' (https://vrch.at/' || worlds.id || '), from ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.start_datetime), '(unknown)') || ' until ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.end_datetime), '(unknown)')
+                FROM checkins
+                INNER JOIN worlds
+                ON checkins.world_id = worlds.id
+            """
+            ).fetchall()
+
+            self.logger.info("History: {}".format(result))
+
+            output_file.writelines("{}\n".format(row[0]) for row in result)
+
+        elif extension == ".json":
+            result = db.execute(
+                """
+                SELECT json_group_array(json_object(
+                    'world_name', worlds.name, 
+                    'world_url', 'https://vrch.at/' || worlds.id,
+                    'start_datetime', checkins.start_datetime,
+                    'end_datetime', checkins.end_datetime 
+                ))
+                FROM checkins
+                INNER JOIN worlds
+                ON checkins.world_id = worlds.id
+            """
+            ).fetchone()
+
+            output_file.write(result[0])
+        else:
+            raise NotImplementedError("Unexpected file extension: {}".format(extension))
+
+        db_conn.commit()
+
     def on_export(self, icon, item):
         outfilename = filedialog.asksaveasfilename(
             title="Save VRChat Location History",
@@ -175,62 +230,13 @@ class VRCTrackerApp:
         )
 
         with open(outfilename, mode="w", encoding="utf-8") as output_file:
-            db_conn = sqlite3.connect(self.database_path)
-            db = db_conn.cursor()
-
-            # TODO: Gracefully handle errors fetching from database
-            if extension == ".md":
-                result = db.execute(
-                    """
-                    SELECT '- [' || ifnull(worlds.name, worlds.id) || '](https://vrch.at/' || worlds.id || ')  \n  from ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.start_datetime), '(unknown)') || ' until ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.end_datetime), '(unknown)')
-                    FROM checkins
-                    INNER JOIN worlds
-                    ON checkins.world_id = worlds.id
-                """
-                ).fetchall()
-
-                self.logger.info("History: {}".format(result))
-
-                output_file.write("# VRCTracker Location History\n\n")
-                output_file.writelines("{}\n".format(row[0]) for row in result)
-
-            elif extension == ".txt":
-                result = db.execute(
-                    """
-                    SELECT ifnull(worlds.name, worlds.id) || ' (https://vrch.at/' || worlds.id || '), from ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.start_datetime), '(unknown)') || ' until ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.end_datetime), '(unknown)')
-                    FROM checkins
-                    INNER JOIN worlds
-                    ON checkins.world_id = worlds.id
-                """
-                ).fetchall()
-
-                self.logger.info("History: {}".format(result))
-
-                output_file.writelines("{}\n".format(row[0]) for row in result)
-
-            elif extension == ".json":
-                result = db.execute(
-                    """
-                    SELECT json_group_array(json_object(
-                        'world_name', worlds.name, 
-                        'world_url', 'https://vrch.at/' || worlds.id,
-                        'start_datetime', checkins.start_datetime,
-                        'end_datetime', checkins.end_datetime 
-                    ))
-                    FROM checkins
-                    INNER JOIN worlds
-                    ON checkins.world_id = worlds.id
-                """
-                ).fetchone()
-
-                output_file.write(result[0])
-            else:
+            try:
+                self.format_as(extension, output_file)
+            except Exception as e:
                 messagebox.showerror(
                     title="VRCTracker",
-                    message="Unexpected file extension: {}".format(extension),
+                    message=str(e),
                 )
-
-            db_conn.commit()
 
     def on_exit(self, icon, item):
         self.stop_event.set()

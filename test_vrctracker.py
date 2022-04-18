@@ -2,8 +2,22 @@ import unittest
 
 from vrctracker import VRCTrackerApp
 
+import io
 import os
+import sqlite3
 import sys
+from tempfile import TemporaryDirectory
+
+DB_CHECKIN_FIXTURES = """
+INSERT INTO "worlds" VALUES ('wrld_4432ea9b-729c-46e3-8eaf-846aa0a37fdd', 'VRChat Home');
+INSERT INTO "worlds" VALUES ('wrld_56b348fc-b1cb-4242-8587-9eb8e01ef399', 'Just Rain');
+INSERT INTO "worlds" VALUES ('wrld_26120cd6-6097-406e-8a48-a3657cb60511', 'Reflections 2');
+INSERT INTO "checkins" VALUES ('wrld_4432ea9b-729c-46e3-8eaf-846aa0a37fdd', '2022-04-05T23:02:13-07:00', '2022-04-05T23:02:28-07:00');
+INSERT INTO "checkins" VALUES ('wrld_26120cd6-6097-406e-8a48-a3657cb60511', '2022-04-10T18:08:22-07:00', '2022-04-10T18:38:56-07:00');
+INSERT INTO "checkins" VALUES ('wrld_56b348fc-b1cb-4242-8587-9eb8e01ef399', '2022-04-15T16:09:26-07:00', '2022-04-15T16:10:35-07:00');
+INSERT INTO "checkins" VALUES ('wrld_56b348fc-b1cb-4242-8587-9eb8e01ef399', '2022-04-15T18:13:51-07:00', '2022-04-15T18:14:25-07:00');
+INSERT INTO "checkins" VALUES ('wrld_26120cd6-6097-406e-8a48-a3657cb60511', '2022-04-15T16:10:35-07:00', '2022-04-15T16:39:21-07:00');
+"""
 
 
 class VRCTrackerTests(unittest.TestCase):
@@ -19,8 +33,91 @@ class VRCTrackerTests(unittest.TestCase):
             ),
         )
 
-    def test_init(self):
-        app = VRCTrackerApp()
+    def test_format_as_markdown(self):
+        with TemporaryDirectory() as vrchat_data_dir:
+            with TemporaryDirectory() as user_data_dir:
+                app = VRCTrackerApp(
+                    user_data_dir=user_data_dir, vrchat_data_dir=vrchat_data_dir
+                )
+                db_conn = sqlite3.connect(app.database_path)
+                db = db_conn.cursor()
+                db.executescript(DB_CHECKIN_FIXTURES)
+                db_conn.commit()
+
+                file = io.StringIO("")
+
+                app.format_as(".md", file)
+
+                file.seek(0)
+                result = file.read()
+
+                self.assertEqual(
+                    result,
+                    """# VRCTracker Location History
+
+- [VRChat Home](https://vrch.at/wrld_4432ea9b-729c-46e3-8eaf-846aa0a37fdd)  
+  from 06/04/2022, 06:02 until 06/04/2022, 06:02
+- [Reflections 2](https://vrch.at/wrld_26120cd6-6097-406e-8a48-a3657cb60511)  
+  from 11/04/2022, 01:08 until 11/04/2022, 01:38
+- [Just Rain](https://vrch.at/wrld_56b348fc-b1cb-4242-8587-9eb8e01ef399)  
+  from 15/04/2022, 23:09 until 15/04/2022, 23:10
+- [Just Rain](https://vrch.at/wrld_56b348fc-b1cb-4242-8587-9eb8e01ef399)  
+  from 16/04/2022, 01:13 until 16/04/2022, 01:14
+- [Reflections 2](https://vrch.at/wrld_26120cd6-6097-406e-8a48-a3657cb60511)  
+  from 15/04/2022, 23:10 until 15/04/2022, 23:39
+""",
+                )
+
+    def test_format_as_text(self):
+        with TemporaryDirectory() as vrchat_data_dir:
+            with TemporaryDirectory() as user_data_dir:
+                app = VRCTrackerApp(
+                    user_data_dir=user_data_dir, vrchat_data_dir=vrchat_data_dir
+                )
+                db_conn = sqlite3.connect(app.database_path)
+                db = db_conn.cursor()
+                db.executescript(DB_CHECKIN_FIXTURES)
+                db_conn.commit()
+
+                file = io.StringIO("")
+
+                app.format_as(".txt", file)
+
+                file.seek(0)
+                result = file.read()
+
+                self.assertEqual(
+                    result,
+                    """VRChat Home (https://vrch.at/wrld_4432ea9b-729c-46e3-8eaf-846aa0a37fdd), from 06/04/2022, 06:02 until 06/04/2022, 06:02
+Reflections 2 (https://vrch.at/wrld_26120cd6-6097-406e-8a48-a3657cb60511), from 11/04/2022, 01:08 until 11/04/2022, 01:38
+Just Rain (https://vrch.at/wrld_56b348fc-b1cb-4242-8587-9eb8e01ef399), from 15/04/2022, 23:09 until 15/04/2022, 23:10
+Just Rain (https://vrch.at/wrld_56b348fc-b1cb-4242-8587-9eb8e01ef399), from 16/04/2022, 01:13 until 16/04/2022, 01:14
+Reflections 2 (https://vrch.at/wrld_26120cd6-6097-406e-8a48-a3657cb60511), from 15/04/2022, 23:10 until 15/04/2022, 23:39
+""",
+                )
+
+    def test_format_as_json(self):
+        with TemporaryDirectory() as vrchat_data_dir:
+            with TemporaryDirectory() as user_data_dir:
+                app = VRCTrackerApp(
+                    user_data_dir=user_data_dir, vrchat_data_dir=vrchat_data_dir
+                )
+                db_conn = sqlite3.connect(app.database_path)
+                db = db_conn.cursor()
+                db.executescript(DB_CHECKIN_FIXTURES)
+                db_conn.commit()
+
+                file = io.StringIO("")
+
+                app.format_as(".json", file)
+
+                file.seek(0)
+                result = file.read()
+
+                self.assertEqual(
+                    result,
+                    """[{"world_name":"VRChat Home","world_url":"https://vrch.at/wrld_4432ea9b-729c-46e3-8eaf-846aa0a37fdd","start_datetime":"2022-04-05T23:02:13-07:00","end_datetime":"2022-04-05T23:02:28-07:00"},{"world_name":"Reflections 2","world_url":"https://vrch.at/wrld_26120cd6-6097-406e-8a48-a3657cb60511","start_datetime":"2022-04-10T18:08:22-07:00","end_datetime":"2022-04-10T18:38:56-07:00"},{"world_name":"Just Rain","world_url":"https://vrch.at/wrld_56b348fc-b1cb-4242-8587-9eb8e01ef399","start_datetime":"2022-04-15T16:09:26-07:00","end_datetime":"2022-04-15T16:10:35-07:00"},{"world_name":"Just Rain","world_url":"https://vrch.at/wrld_56b348fc-b1cb-4242-8587-9eb8e01ef399","start_datetime":"2022-04-15T18:13:51-07:00","end_datetime":"2022-04-15T18:14:25-07:00"},{"world_name":"Reflections 2","world_url":"https://vrch.at/wrld_26120cd6-6097-406e-8a48-a3657cb60511","start_datetime":"2022-04-15T16:10:35-07:00","end_datetime":"2022-04-15T16:39:21-07:00"}]""",
+                )
 
 
 if __name__ == "__main__":
