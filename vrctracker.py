@@ -162,13 +162,14 @@ class VRCTrackerApp:
 
     def format_as(self, extension, output_file):
         db_conn = sqlite3.connect(self.database_path)
+        db_conn.row_factory = sqlite3.Row
         db = db_conn.cursor()
 
         # TODO: Gracefully handle errors fetching from database
         if extension == ".md":
             result = db.execute(
                 """
-                SELECT '- [' || ifnull(worlds.name, worlds.id) || '](https://vrch.at/' || worlds.id || ')  \n  from ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.start_datetime), '(unknown)') || ' until ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.end_datetime), '(unknown)')
+                SELECT worlds.id, worlds.name, checkins.start_datetime, checkins.end_datetime
                 FROM checkins
                 INNER JOIN worlds
                 ON checkins.world_id = worlds.id
@@ -178,12 +179,30 @@ class VRCTrackerApp:
             self.logger.info("History: {}".format(result))
 
             output_file.write("# VRCTracker Location History\n\n")
-            output_file.writelines("{}\n".format(row[0]) for row in result)
+            output_file.writelines(
+                """- [{}](https://vrch.at/{})  
+  from {} until {}
+""".format(
+                    (row["name"] or row["id"]),
+                    row["id"],
+                    default_tzinfo(parse_date(row["start_datetime"]), gettz()).strftime(
+                        "%d/%m/%Y, %H:%M"
+                    )
+                    if row["start_datetime"]
+                    else "(unknown)",
+                    default_tzinfo(parse_date(row["end_datetime"]), gettz()).strftime(
+                        "%d/%m/%Y, %H:%M"
+                    )
+                    if row["end_datetime"]
+                    else "(unknown)",
+                )
+                for row in result
+            )
 
         elif extension == ".txt":
             result = db.execute(
                 """
-                SELECT ifnull(worlds.name, worlds.id) || ' (https://vrch.at/' || worlds.id || '), from ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.start_datetime), '(unknown)') || ' until ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.end_datetime), '(unknown)')
+                SELECT worlds.id, worlds.name, checkins.start_datetime, checkins.end_datetime
                 FROM checkins
                 INNER JOIN worlds
                 ON checkins.world_id = worlds.id
@@ -192,7 +211,23 @@ class VRCTrackerApp:
 
             self.logger.info("History: {}".format(result))
 
-            output_file.writelines("{}\n".format(row[0]) for row in result)
+            output_file.writelines(
+                "{} (https://vrch.at/{}), from {} until {}\n".format(
+                    (row["name"] or row["id"]),
+                    row["id"],
+                    default_tzinfo(parse_date(row["start_datetime"]), gettz()).strftime(
+                        "%d/%m/%Y, %H:%M"
+                    )
+                    if row["start_datetime"]
+                    else "(unknown)",
+                    default_tzinfo(parse_date(row["end_datetime"]), gettz()).strftime(
+                        "%d/%m/%Y, %H:%M"
+                    )
+                    if row["end_datetime"]
+                    else "(unknown)",
+                )
+                for row in result
+            )
 
         elif extension == ".json":
             result = db.execute(
