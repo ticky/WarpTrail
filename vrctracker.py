@@ -20,9 +20,9 @@ from tkinter import filedialog, messagebox
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-APP_EMBEDDED = getattr(sys, 'frozen', False)
+APP_EMBEDDED = getattr(sys, "frozen", False)
 
-DB_SCHEMA = '''
+DB_SCHEMA = """
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS worlds (
@@ -48,11 +48,10 @@ CREATE TABLE IF NOT EXISTS visitors (
 );
 
 CREATE UNIQUE INDEX visitors_world_id_name_time_unique ON visitors(world_id, name, start_datetime); 
-'''
+"""
 
-EXPORT_FILETYPES = [('Markdown',   '.md'),
-                    ('Plain Text', '.txt'),
-                    ('JSON Data',  '.json')]
+EXPORT_FILETYPES = [("Markdown", ".md"), ("Plain Text", ".txt"), ("JSON Data", ".json")]
+
 
 class FileCreatedEventHandler(FileSystemEventHandler):
     def __init__(self, app, logger=None):
@@ -63,7 +62,7 @@ class FileCreatedEventHandler(FileSystemEventHandler):
 
     def on_created(self, event):
         super().on_created(event)
-        
+
         if event.is_directory:
             return
 
@@ -75,15 +74,17 @@ class FileCreatedEventHandler(FileSystemEventHandler):
         self.logger.info("VRChat log file detected: %s", relpath)
 
         vrchat_process = None
-        for process in psutil.process_iter(['name']):
-            if process.info['name'] == "VRChat.exe":
+        for process in psutil.process_iter(["name"]):
+            if process.info["name"] == "VRChat.exe":
                 vrchat_process = process
                 break
 
         self.logger.info("VRChat process detected: %d", vrchat_process.pid)
 
-        Thread(target=self.app.follow_log_file,
-               args=(event.src_path, vrchat_process)).start()
+        Thread(
+            target=self.app.follow_log_file, args=(event.src_path, vrchat_process)
+        ).start()
+
 
 class VRCTrackerApp:
     def __init__(self, logger=None):
@@ -93,13 +94,15 @@ class VRCTrackerApp:
         if not os.path.isdir(user_data_dir):
             os.makedirs(user_data_dir, exist_ok=True)
         self.logger.debug("user_data_dir: %s", user_data_dir)
-    
-        self.vrchat_data_dir = os.path.abspath(os.path.expandvars("%LOCALAPPDATA%\..\LocalLow\VRChat\VRChat"))
+
+        self.vrchat_data_dir = os.path.abspath(
+            os.path.expandvars("%LOCALAPPDATA%\..\LocalLow\VRChat\VRChat")
+        )
 
         self.logger.debug("path: %s", self.vrchat_data_dir)
 
         if not os.path.exists(self.vrchat_data_dir):
-            print('{} could not be found'.format(self.vrchat_data_dir))
+            print("{} could not be found".format(self.vrchat_data_dir))
             return
 
         self.database_path = os.path.join(user_data_dir, "VRCTracker.db")
@@ -107,7 +110,9 @@ class VRCTrackerApp:
         db_conn = sqlite3.connect(self.database_path)
 
         db = db_conn.cursor()
-        db_check = db.execute("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='checkins';").fetchone()
+        db_check = db.execute(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='checkins';"
+        ).fetchone()
         if db_check[0] == 0:
             self.logger.info("initialising database...")
             db.executescript(DB_SCHEMA)
@@ -115,63 +120,74 @@ class VRCTrackerApp:
             self.logger.info("database ready")
 
         if APP_EMBEDDED:
-            iconimage = Image.open(os.path.join(sys._MEIPASS, "resources/vrctracker.ico"))
+            iconimage = Image.open(
+                os.path.join(sys._MEIPASS, "resources/vrctracker.ico")
+            )
         else:
             iconimage = Image.open("resources/vrctracker.ico")
 
-        self.icon = pystray.Icon('VRCTracker',
-                                 icon=iconimage,
-                                 title='VRCTracker',
-                                 menu=pystray.Menu(
-                                     pystray.MenuItem('Export Location History...',
-                                                      self.on_export),
-                                     pystray.Menu.SEPARATOR,
-                                     pystray.MenuItem('Exit',
-                                                      self.on_exit)
-                                 ))
+        self.icon = pystray.Icon(
+            "VRCTracker",
+            icon=iconimage,
+            title="VRCTracker",
+            menu=pystray.Menu(
+                pystray.MenuItem("Export Location History...", self.on_export),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("Exit", self.on_exit),
+            ),
+        )
 
     def on_export(self, icon, item):
-        outfilename = filedialog.asksaveasfilename(title='Save VRChat Location History',
-                                                   initialfile='VRCTracker History',
-                                                   filetypes=EXPORT_FILETYPES,
-                                                   defaultextension=EXPORT_FILETYPES)
+        outfilename = filedialog.asksaveasfilename(
+            title="Save VRChat Location History",
+            initialfile="VRCTracker History",
+            filetypes=EXPORT_FILETYPES,
+            defaultextension=EXPORT_FILETYPES,
+        )
 
         (_, extension) = os.path.splitext(outfilename)
 
-        self.logger.info("Saving location history as %s, with format %s", outfilename, extension)
+        self.logger.info(
+            "Saving location history as %s, with format %s", outfilename, extension
+        )
 
-        with open(outfilename, mode='w', encoding='utf-8') as output_file:
+        with open(outfilename, mode="w", encoding="utf-8") as output_file:
             db_conn = sqlite3.connect(self.database_path)
             db = db_conn.cursor()
 
             # TODO: Gracefully handle errors fetching from database
-            if extension == '.md':
-                result = db.execute("""
+            if extension == ".md":
+                result = db.execute(
+                    """
                     SELECT '- [' || ifnull(worlds.name, worlds.id) || '](https://vrch.at/' || worlds.id || ')  \n  from ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.start_datetime), '(unknown)') || ' until ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.end_datetime), '(unknown)')
                     FROM checkins
                     INNER JOIN worlds
                     ON checkins.world_id = worlds.id
-                """).fetchall()
-                
+                """
+                ).fetchall()
+
                 self.logger.info("History: {}".format(result))
 
                 output_file.write("# VRCTracker Location History\n\n")
                 output_file.writelines("{}\n".format(row[0]) for row in result)
 
-            elif extension == '.txt':
-                result = db.execute("""
+            elif extension == ".txt":
+                result = db.execute(
+                    """
                     SELECT ifnull(worlds.name, worlds.id) || ' (https://vrch.at/' || worlds.id || '), from ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.start_datetime), '(unknown)') || ' until ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.end_datetime), '(unknown)')
                     FROM checkins
                     INNER JOIN worlds
                     ON checkins.world_id = worlds.id
-                """).fetchall()
-                
+                """
+                ).fetchall()
+
                 self.logger.info("History: {}".format(result))
 
                 output_file.writelines("{}\n".format(row[0]) for row in result)
 
-            elif extension == '.json':
-                result = db.execute("""
+            elif extension == ".json":
+                result = db.execute(
+                    """
                     SELECT json_group_array(json_object(
                         'world_name', worlds.name, 
                         'world_url', 'https://vrch.at/' || worlds.id,
@@ -181,15 +197,17 @@ class VRCTrackerApp:
                     FROM checkins
                     INNER JOIN worlds
                     ON checkins.world_id = worlds.id
-                """).fetchone()
+                """
+                ).fetchone()
 
                 output_file.write(result[0])
             else:
-                messagebox.showerror(title='VRCTracker',
-                                    message="Unexpected file extension: {}".format(extension))
-            
-            db_conn.commit()
+                messagebox.showerror(
+                    title="VRCTracker",
+                    message="Unexpected file extension: {}".format(extension),
+                )
 
+            db_conn.commit()
 
     def on_exit(self, icon, item):
         self.stop_event.set()
@@ -221,7 +239,7 @@ class VRCTrackerApp:
 
     def follow_log_file(self, path, responsible_process):
         # https://medium.com/@aliasav/how-follow-a-file-in-python-tail-f-in-python-bca026a901cf
-        with open(path, mode='r', encoding='utf-8', errors='ignore') as input_file:
+        with open(path, mode="r", encoding="utf-8", errors="ignore") as input_file:
             db_conn = sqlite3.Connection(self.database_path)
             db = db_conn.cursor()
             world_id = None
@@ -230,7 +248,10 @@ class VRCTrackerApp:
                 line = input_file.readline()
 
                 if not line:
-                    if responsible_process == None or not responsible_process.is_running():
+                    if (
+                        responsible_process == None
+                        or not responsible_process.is_running()
+                    ):
                         break
 
                     time.sleep(0.1)
@@ -241,65 +262,84 @@ class VRCTrackerApp:
                 # Regexes inspired by https://github.com/sunasaji/VRC_log_checker
 
                 # Gather world IDs from Joining messages
-                match = re.search('([0-9\.]+ [0-9:]+).+Joining (wrld_[0-9a-f\-]{36})', line)
+                match = re.search(
+                    "([0-9\.]+ [0-9:]+).+Joining (wrld_[0-9a-f\-]{36})", line
+                )
                 if match != None:
                     date = default_tzinfo(parse_date(match.group(1)), gettz())
                     world_id = match.group(2)
 
-                    self.logger.info("Entered world %s at %s", world_id, date.isoformat())
+                    self.logger.info(
+                        "Entered world %s at %s", world_id, date.isoformat()
+                    )
 
                     # Update any unresolved checkins to the previous world to have ended
                     db.execute(
                         "UPDATE checkins SET end_datetime = :end_datetime WHERE world_id = :last_world_id AND end_datetime IS NULL",
-                        {"end_datetime": date.isoformat(), "last_world_id": last_world_id}
+                        {
+                            "end_datetime": date.isoformat(),
+                            "last_world_id": last_world_id,
+                        },
                     )
                     # Insert a world ID value, but ignore if there's a conflict
                     db.execute(
                         "INSERT OR IGNORE INTO worlds (id) VALUES (:id)",
-                        {"id": world_id}
+                        {"id": world_id},
                     )
                     # Insert a fresh checkin beginning at this time
                     db.execute(
                         "INSERT INTO checkins (world_id, start_datetime) VALUES (:world_id, :start_datetime)",
-                        {"world_id": world_id, "start_datetime": date.isoformat()}
+                        {"world_id": world_id, "start_datetime": date.isoformat()},
                     )
                     db_conn.commit()
 
                 # Gather world names from Joining messages
-                match = re.search('[0-9\.]+ [0-9:]+.+Joining or Creating Room: (.+)', line)
+                match = re.search(
+                    "[0-9\.]+ [0-9:]+.+Joining or Creating Room: (.+)", line
+                )
                 if match != None:
                     name = match.group(1)
-                    self.logger.info("Found world name: \"%s\"", name)
+                    self.logger.info('Found world name: "%s"', name)
                     db.execute(
                         "UPDATE worlds SET name = :name WHERE id = :id",
-                        {"name": name, "id": world_id}
+                        {"name": name, "id": world_id},
                     )
                     db_conn.commit()
-                
-                # Gather player names from OnPlayerJoined/Left events
-                match = re.search('([0-9\.]+ [0-9:]+).+OnPlayerJoined (.+)', line)
-                if match != None:
-                    date = default_tzinfo(parse_date(match.group(1)), gettz())
-                    self.logger.info("Player \"%s\" Joined, at %s", match.group(2), date.isoformat())
 
-                match = re.search('([0-9\.]+ [0-9:]+).+OnPlayerLeft (.+)', line)
+                # Gather player names from OnPlayerJoined/Left events
+                match = re.search("([0-9\.]+ [0-9:]+).+OnPlayerJoined (.+)", line)
                 if match != None:
                     date = default_tzinfo(parse_date(match.group(1)), gettz())
-                    self.logger.info("Player \"%s\" Left, at %s", match.group(2), date.isoformat())
-        
+                    self.logger.info(
+                        'Player "%s" Joined, at %s', match.group(2), date.isoformat()
+                    )
+
+                match = re.search("([0-9\.]+ [0-9:]+).+OnPlayerLeft (.+)", line)
+                if match != None:
+                    date = default_tzinfo(parse_date(match.group(1)), gettz())
+                    self.logger.info(
+                        'Player "%s" Left, at %s', match.group(2), date.isoformat()
+                    )
+
             # Update any unresolved checkins to the previous world to have ended
             db.execute(
                 "UPDATE checkins SET end_datetime = :end_datetime WHERE world_id = :world_id AND end_datetime IS NULL",
-                {"end_datetime": default_tzinfo(datetime.now(), gettz()).isoformat(), "world_id": world_id}
+                {
+                    "end_datetime": default_tzinfo(datetime.now(), gettz()).isoformat(),
+                    "world_id": world_id,
+                },
             )
             db_conn.commit()
 
             self.logger.info("Stopped processing %s", path)
 
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s: %(message)s',
-                        datefmt='%Y-%m-%d %H:%M:%S')
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 
     app = VRCTrackerApp()
     app.run()
