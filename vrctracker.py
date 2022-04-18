@@ -88,6 +88,7 @@ class FileCreatedEventHandler(FileSystemEventHandler):
 
 VRCHAT_DIR = "%LOCALAPPDATA%\\..\\LocalLow\\VRChat\\VRChat"
 
+
 class VRCTrackerApp:
     def get_user_data_dir():
         user_data_dir = AppDirs("VRCTracker", "ticky").user_data_dir
@@ -104,11 +105,17 @@ class VRCTrackerApp:
 
         return os.path.abspath(expanded_dir)
 
-    def __init__(self, user_data_dir=get_user_data_dir(), vrchat_data_dir=get_vrchat_data_dir(), database_path=None, logger=None):
+    def __init__(
+        self,
+        user_data_dir=get_user_data_dir(),
+        vrchat_data_dir=get_vrchat_data_dir(),
+        database_path=None,
+        logger=None,
+    ):
         self.logger = logger or logging.root
 
         self.logger.debug("user_data_dir: %s", user_data_dir)
-    
+
         self.vrchat_data_dir = vrchat_data_dir
 
         self.logger.debug("vrchat_data_dir: %s", self.vrchat_data_dir)
