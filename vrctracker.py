@@ -86,26 +86,42 @@ class FileCreatedEventHandler(FileSystemEventHandler):
         ).start()
 
 
-class VRCTrackerApp:
-    def __init__(self, logger=None):
-        self.logger = logger or logging.root
+VRCHAT_DIR = "%LOCALAPPDATA%\\..\\LocalLow\\VRChat\\VRChat"
 
+class VRCTrackerApp:
+    def get_user_data_dir():
         user_data_dir = AppDirs("VRCTracker", "ticky").user_data_dir
         if not os.path.isdir(user_data_dir):
             os.makedirs(user_data_dir, exist_ok=True)
+        return user_data_dir
+
+    def get_vrchat_data_dir():
+        expanded_dir = os.path.expandvars(VRCHAT_DIR)
+
+        # Fallback for non-windows systems
+        if expanded_dir == VRCHAT_DIR:
+            return AppDirs("VRChat", "VRChat").user_data_dir
+
+        return os.path.abspath(expanded_dir)
+
+    def __init__(self, user_data_dir=get_user_data_dir(), vrchat_data_dir=get_vrchat_data_dir(), database_path=None, logger=None):
+        self.logger = logger or logging.root
+
         self.logger.debug("user_data_dir: %s", user_data_dir)
+    
+        self.vrchat_data_dir = vrchat_data_dir
 
-        self.vrchat_data_dir = os.path.abspath(
-            os.path.expandvars("%LOCALAPPDATA%\..\LocalLow\VRChat\VRChat")
-        )
-
-        self.logger.debug("path: %s", self.vrchat_data_dir)
+        self.logger.debug("vrchat_data_dir: %s", self.vrchat_data_dir)
 
         if not os.path.exists(self.vrchat_data_dir):
             print("{} could not be found".format(self.vrchat_data_dir))
             return
 
-        self.database_path = os.path.join(user_data_dir, "VRCTracker.db")
+        if database_path is None:
+            self.database_path = os.path.join(user_data_dir, "VRCTracker.db")
+        else:
+            self.database_path = database_path
+
         self.logger.debug("database_path: %s", self.database_path)
         db_conn = sqlite3.connect(self.database_path)
 
