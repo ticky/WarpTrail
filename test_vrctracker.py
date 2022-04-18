@@ -1,6 +1,6 @@
 import unittest
 
-import vrctracker
+from vrctracker import VRCTrackerApp
 
 import os
 import sys
@@ -8,20 +8,19 @@ import sys
 
 class VRCTrackerTests(unittest.TestCase):
     def test_get_user_data_dir(self):
-        self.assertTrue(os.path.isdir(vrctracker.VRCTrackerApp.get_user_data_dir()))
+        self.assertTrue(os.path.isdir(VRCTrackerApp.get_user_data_dir()))
 
     @unittest.skipUnless(sys.platform.startswith("win"), "requires Windows")
     def test_get_vrchat_data_dir_windows(self):
-        result = vrctracker.VRCTrackerApp.get_user_data_dir()
         self.assertEqual(
-            result,
+            VRCTrackerApp.get_user_data_dir(),
             os.path.abspath(
                 os.path.expandvars("%LOCALAPPDATA%\\..\\LocalLow\\VRChat\\VRChat")
             ),
         )
 
     def test_init(self):
-        app = vrctracker.VRCTrackerApp()
+        app = VRCTrackerApp()
 
 
 if __name__ == "__main__":
