@@ -36,8 +36,8 @@ class VRCTrackerTests(unittest.TestCase):
         )
 
     def test_format_as_markdown(self):
-        with TemporaryDirectory() as vrchat_data_dir:
-            with TemporaryDirectory() as user_data_dir:
+        with TemporaryDirectory(ignore_cleanup_errors=True) as vrchat_data_dir:
+            with TemporaryDirectory(ignore_cleanup_errors=True) as user_data_dir:
                 app = VRCTrackerApp(
                     user_data_dir=user_data_dir, vrchat_data_dir=vrchat_data_dir
                 )
