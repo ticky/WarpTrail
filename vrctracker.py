@@ -327,7 +327,7 @@ class VRCTrackerApp:
 
                 # Gather world IDs from Joining messages
                 match = re.search(
-                    "([0-9\.]+ [0-9:]+).+Joining (wrld_[0-9a-f\-]{36})", line
+                    "([0-9.]+ [0-9:]+).+Joining (wrld_[0-9a-f-]{36})", line
                 )
                 if match != None:
                     date = default_tzinfo(parse_date(match.group(1)), gettz())
@@ -359,7 +359,7 @@ class VRCTrackerApp:
 
                 # Gather world names from Joining messages
                 match = re.search(
-                    "[0-9\.]+ [0-9:]+.+Joining or Creating Room: (.+)", line
+                    "[0-9.]+ [0-9:]+.+Joining or Creating Room: (.+)", line
                 )
                 if match != None:
                     name = match.group(1)
@@ -371,14 +371,14 @@ class VRCTrackerApp:
                     db_conn.commit()
 
                 # Gather player names from OnPlayerJoined/Left events
-                match = re.search("([0-9\.]+ [0-9:]+).+OnPlayerJoined (.+)", line)
+                match = re.search("([0-9.]+ [0-9:]+).+OnPlayerJoined (.+)", line)
                 if match != None:
                     date = default_tzinfo(parse_date(match.group(1)), gettz())
                     self.logger.info(
                         'Player "%s" Joined, at %s', match.group(2), date.isoformat()
                     )
 
-                match = re.search("([0-9\.]+ [0-9:]+).+OnPlayerLeft (.+)", line)
+                match = re.search("([0-9.]+ [0-9:]+).+OnPlayerLeft (.+)", line)
                 if match != None:
                     date = default_tzinfo(parse_date(match.group(1)), gettz())
                     self.logger.info(
