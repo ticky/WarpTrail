@@ -29,7 +29,7 @@ class VRCTrackerTests(unittest.TestCase):
     @unittest.skipUnless(sys.platform.startswith("win"), "requires Windows")
     def test_get_vrchat_data_dir_windows(self):
         self.assertEqual(
-            VRCTrackerApp.get_user_data_dir(),
+            VRCTrackerApp.get_vrchat_data_dir(),
             os.path.abspath(
                 os.path.expandvars("%LOCALAPPDATA%\\..\\LocalLow\\VRChat\\VRChat")
             ),
