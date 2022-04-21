@@ -1,5 +1,7 @@
 # VRCTracker
 
+[![Python](https://github.com/ticky/VRCTracker/actions/workflows/python.yml/badge.svg)](https://github.com/ticky/VRCTracker/actions/workflows/python.yml)
+
 Automatically keep track of the worlds you visit in VRChat
 
 ## Usage
@@ -27,6 +29,22 @@ pyinstaller --name VRCTracker --add-data="resources\*;resources" --icon resource
 ```
 
 This can also be used via system Python but I don't think that's a good move for general distribution. Maybe it'll become a pypi package one day though, who knows.
+
+## Testing
+
+A test suite is included, and automatically executed by GitHub Actions.
+
+Tests can be executed using either:
+
+```shell
+python3 test_vrctracker.py
+```
+
+or, if pytest is installed:
+
+```shell
+pytest
+```
 
 ---
 

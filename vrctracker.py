@@ -86,26 +86,49 @@ class FileCreatedEventHandler(FileSystemEventHandler):
         ).start()
 
 
-class VRCTrackerApp:
-    def __init__(self, logger=None):
-        self.logger = logger or logging.root
+VRCHAT_DIR = "%LOCALAPPDATA%\\..\\LocalLow\\VRChat\\VRChat"
 
+
+class VRCTrackerApp:
+    def get_user_data_dir():
         user_data_dir = AppDirs("VRCTracker", "ticky").user_data_dir
         if not os.path.isdir(user_data_dir):
             os.makedirs(user_data_dir, exist_ok=True)
+        return user_data_dir
+
+    def get_vrchat_data_dir():
+        expanded_dir = os.path.expandvars(VRCHAT_DIR)
+
+        # Fallback for non-windows systems
+        if expanded_dir == VRCHAT_DIR:
+            return AppDirs("VRChat", "VRChat").user_data_dir
+
+        return os.path.abspath(expanded_dir)
+
+    def __init__(
+        self,
+        user_data_dir=get_user_data_dir(),
+        vrchat_data_dir=get_vrchat_data_dir(),
+        database_path=None,
+        logger=None,
+    ):
+        self.logger = logger or logging.root
+
         self.logger.debug("user_data_dir: %s", user_data_dir)
 
-        self.vrchat_data_dir = os.path.abspath(
-            os.path.expandvars("%LOCALAPPDATA%\..\LocalLow\VRChat\VRChat")
-        )
+        self.vrchat_data_dir = vrchat_data_dir
 
-        self.logger.debug("path: %s", self.vrchat_data_dir)
+        self.logger.debug("vrchat_data_dir: %s", self.vrchat_data_dir)
 
         if not os.path.exists(self.vrchat_data_dir):
             print("{} could not be found".format(self.vrchat_data_dir))
             return
 
-        self.database_path = os.path.join(user_data_dir, "VRCTracker.db")
+        if database_path is None:
+            self.database_path = os.path.join(user_data_dir, "VRCTracker.db")
+        else:
+            self.database_path = database_path
+
         self.logger.debug("database_path: %s", self.database_path)
         db_conn = sqlite3.connect(self.database_path)
 
@@ -137,6 +160,96 @@ class VRCTrackerApp:
             ),
         )
 
+    def format_as(self, extension, output_file):
+        db_conn = sqlite3.connect(self.database_path)
+        db_conn.row_factory = sqlite3.Row
+        db = db_conn.cursor()
+
+        # TODO: Gracefully handle errors fetching from database
+        if extension == ".md":
+            result = db.execute(
+                """
+                SELECT worlds.id, worlds.name, checkins.start_datetime, checkins.end_datetime
+                FROM checkins
+                INNER JOIN worlds
+                ON checkins.world_id = worlds.id
+            """
+            ).fetchall()
+
+            self.logger.info("History: {}".format(result))
+
+            output_file.write("# VRCTracker Location History\n\n")
+            output_file.writelines(
+                """- [{}](https://vrch.at/{})  
+  from {} until {}
+""".format(
+                    (row["name"] or row["id"]),
+                    row["id"],
+                    default_tzinfo(parse_date(row["start_datetime"]), gettz()).strftime(
+                        "%d/%m/%Y, %H:%M"
+                    )
+                    if row["start_datetime"]
+                    else "(unknown)",
+                    default_tzinfo(parse_date(row["end_datetime"]), gettz()).strftime(
+                        "%d/%m/%Y, %H:%M"
+                    )
+                    if row["end_datetime"]
+                    else "(unknown)",
+                )
+                for row in result
+            )
+
+        elif extension == ".txt":
+            result = db.execute(
+                """
+                SELECT worlds.id, worlds.name, checkins.start_datetime, checkins.end_datetime
+                FROM checkins
+                INNER JOIN worlds
+                ON checkins.world_id = worlds.id
+            """
+            ).fetchall()
+
+            self.logger.info("History: {}".format(result))
+
+            output_file.writelines(
+                "{} (https://vrch.at/{}), from {} until {}\n".format(
+                    (row["name"] or row["id"]),
+                    row["id"],
+                    default_tzinfo(parse_date(row["start_datetime"]), gettz()).strftime(
+                        "%d/%m/%Y, %H:%M"
+                    )
+                    if row["start_datetime"]
+                    else "(unknown)",
+                    default_tzinfo(parse_date(row["end_datetime"]), gettz()).strftime(
+                        "%d/%m/%Y, %H:%M"
+                    )
+                    if row["end_datetime"]
+                    else "(unknown)",
+                )
+                for row in result
+            )
+
+        elif extension == ".json":
+            result = db.execute(
+                """
+                SELECT json_group_array(json_object(
+                    'world_name', worlds.name, 
+                    'world_url', 'https://vrch.at/' || worlds.id,
+                    'start_datetime', checkins.start_datetime,
+                    'end_datetime', checkins.end_datetime 
+                ))
+                FROM checkins
+                INNER JOIN worlds
+                ON checkins.world_id = worlds.id
+            """
+            ).fetchone()
+
+            output_file.write(result[0])
+        else:
+            raise NotImplementedError("Unexpected file extension: {}".format(extension))
+
+        db_conn.commit()
+
     def on_export(self, icon, item):
         outfilename = filedialog.asksaveasfilename(
             title="Save VRChat Location History",
@@ -152,62 +265,13 @@ class VRCTrackerApp:
         )
 
         with open(outfilename, mode="w", encoding="utf-8") as output_file:
-            db_conn = sqlite3.connect(self.database_path)
-            db = db_conn.cursor()
-
-            # TODO: Gracefully handle errors fetching from database
-            if extension == ".md":
-                result = db.execute(
-                    """
-                    SELECT '- [' || ifnull(worlds.name, worlds.id) || '](https://vrch.at/' || worlds.id || ')  \n  from ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.start_datetime), '(unknown)') || ' until ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.end_datetime), '(unknown)')
-                    FROM checkins
-                    INNER JOIN worlds
-                    ON checkins.world_id = worlds.id
-                """
-                ).fetchall()
-
-                self.logger.info("History: {}".format(result))
-
-                output_file.write("# VRCTracker Location History\n\n")
-                output_file.writelines("{}\n".format(row[0]) for row in result)
-
-            elif extension == ".txt":
-                result = db.execute(
-                    """
-                    SELECT ifnull(worlds.name, worlds.id) || ' (https://vrch.at/' || worlds.id || '), from ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.start_datetime), '(unknown)') || ' until ' || ifnull(STRFTIME('%d/%m/%Y, %H:%M', checkins.end_datetime), '(unknown)')
-                    FROM checkins
-                    INNER JOIN worlds
-                    ON checkins.world_id = worlds.id
-                """
-                ).fetchall()
-
-                self.logger.info("History: {}".format(result))
-
-                output_file.writelines("{}\n".format(row[0]) for row in result)
-
-            elif extension == ".json":
-                result = db.execute(
-                    """
-                    SELECT json_group_array(json_object(
-                        'world_name', worlds.name, 
-                        'world_url', 'https://vrch.at/' || worlds.id,
-                        'start_datetime', checkins.start_datetime,
-                        'end_datetime', checkins.end_datetime 
-                    ))
-                    FROM checkins
-                    INNER JOIN worlds
-                    ON checkins.world_id = worlds.id
-                """
-                ).fetchone()
-
-                output_file.write(result[0])
-            else:
+            try:
+                self.format_as(extension, output_file)
+            except Exception as e:
                 messagebox.showerror(
                     title="VRCTracker",
-                    message="Unexpected file extension: {}".format(extension),
+                    message=str(e),
                 )
-
-            db_conn.commit()
 
     def on_exit(self, icon, item):
         self.stop_event.set()
@@ -263,7 +327,7 @@ class VRCTrackerApp:
 
                 # Gather world IDs from Joining messages
                 match = re.search(
-                    "([0-9\.]+ [0-9:]+).+Joining (wrld_[0-9a-f\-]{36})", line
+                    "([0-9.]+ [0-9:]+).+Joining (wrld_[0-9a-f-]{36})", line
                 )
                 if match != None:
                     date = default_tzinfo(parse_date(match.group(1)), gettz())
@@ -295,7 +359,7 @@ class VRCTrackerApp:
 
                 # Gather world names from Joining messages
                 match = re.search(
-                    "[0-9\.]+ [0-9:]+.+Joining or Creating Room: (.+)", line
+                    "[0-9.]+ [0-9:]+.+Joining or Creating Room: (.+)", line
                 )
                 if match != None:
                     name = match.group(1)
@@ -307,14 +371,14 @@ class VRCTrackerApp:
                     db_conn.commit()
 
                 # Gather player names from OnPlayerJoined/Left events
-                match = re.search("([0-9\.]+ [0-9:]+).+OnPlayerJoined (.+)", line)
+                match = re.search("([0-9.]+ [0-9:]+).+OnPlayerJoined (.+)", line)
                 if match != None:
                     date = default_tzinfo(parse_date(match.group(1)), gettz())
                     self.logger.info(
                         'Player "%s" Joined, at %s', match.group(2), date.isoformat()
                     )
 
-                match = re.search("([0-9\.]+ [0-9:]+).+OnPlayerLeft (.+)", line)
+                match = re.search("([0-9.]+ [0-9:]+).+OnPlayerLeft (.+)", line)
                 if match != None:
                     date = default_tzinfo(parse_date(match.group(1)), gettz())
                     self.logger.info(
