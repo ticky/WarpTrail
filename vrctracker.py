@@ -337,9 +337,16 @@ class VRCTrackerApp:
                         "Entered world %s at %s", world_id, date.isoformat()
                     )
 
-                    # Update any unresolved checkins to the previous world to have ended
+                    # Update any unresolved checkins and visitors to the previous world to have ended
                     db.execute(
                         "UPDATE checkins SET end_datetime = :end_datetime WHERE world_id = :last_world_id AND end_datetime IS NULL",
+                        {
+                            "end_datetime": date.isoformat(),
+                            "last_world_id": last_world_id,
+                        },
+                    )
+                    db.execute(
+                        "UPDATE visitors SET end_datetime = :end_datetime WHERE world_id = :last_world_id AND end_datetime IS NULL",
                         {
                             "end_datetime": date.isoformat(),
                             "last_world_id": last_world_id,
@@ -352,7 +359,7 @@ class VRCTrackerApp:
                     )
                     # Insert a fresh checkin beginning at this time
                     db.execute(
-                        "INSERT INTO checkins (world_id, start_datetime) VALUES (:world_id, :start_datetime)",
+                        "INSERT OR IGNORE INTO checkins (world_id, start_datetime) VALUES (:world_id, :start_datetime)",
                         {"world_id": world_id, "start_datetime": date.isoformat()},
                     )
                     db_conn.commit()
@@ -374,20 +381,41 @@ class VRCTrackerApp:
                 match = re.search("([0-9.]+ [0-9:]+).+OnPlayerJoined (.+)", line)
                 if match != None:
                     date = default_tzinfo(parse_date(match.group(1)), gettz())
+                    name = match.group(2)
                     self.logger.info(
-                        'Player "%s" Joined, at %s', match.group(2), date.isoformat()
+                        'Player "%s" Joined, at %s', name, date.isoformat()
+                    )
+                    db.execute(
+                        "INSERT OR IGNORE INTO visitors (world_id, name, start_datetime) VALUES (:world_id, :name, :start_datetime)",
+                        {"world_id": world_id, "name": name, "start_datetime": date.isoformat()},
                     )
 
                 match = re.search("([0-9.]+ [0-9:]+).+OnPlayerLeft (.+)", line)
                 if match != None:
                     date = default_tzinfo(parse_date(match.group(1)), gettz())
+                    name = match.group(2)
                     self.logger.info(
-                        'Player "%s" Left, at %s', match.group(2), date.isoformat()
+                        'Player "%s" Left, at %s', name, date.isoformat()
+                    )
+                    db.execute(
+                        "UPDATE visitors SET end_datetime = :end_datetime WHERE name = :name AND world_id = :world_id AND end_datetime IS NULL",
+                        {
+                            "end_datetime": default_tzinfo(datetime.now(), gettz()).isoformat(),
+                            "name": name,
+                            "world_id": world_id,
+                        },
                     )
 
-            # Update any unresolved checkins to the previous world to have ended
+            # Update any unresolved checkins and visitors to the previous world to have ended
             db.execute(
                 "UPDATE checkins SET end_datetime = :end_datetime WHERE world_id = :world_id AND end_datetime IS NULL",
+                {
+                    "end_datetime": default_tzinfo(datetime.now(), gettz()).isoformat(),
+                    "world_id": world_id,
+                },
+            )
+            db.execute(
+                "UPDATE visitors SET end_datetime = :end_datetime WHERE world_id = :world_id AND end_datetime IS NULL",
                 {
                     "end_datetime": default_tzinfo(datetime.now(), gettz()).isoformat(),
                     "world_id": world_id,
