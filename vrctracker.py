@@ -387,20 +387,22 @@ class VRCTrackerApp:
                     )
                     db.execute(
                         "INSERT OR IGNORE INTO visitors (world_id, name, start_datetime) VALUES (:world_id, :name, :start_datetime)",
-                        {"world_id": world_id, "name": name, "start_datetime": date.isoformat()},
+                        {
+                            "world_id": world_id,
+                            "name": name,
+                            "start_datetime": date.isoformat(),
+                        },
                     )
 
                 match = re.search("([0-9.]+ [0-9:]+).+OnPlayerLeft (.+)", line)
                 if match != None:
                     date = default_tzinfo(parse_date(match.group(1)), gettz())
                     name = match.group(2)
-                    self.logger.info(
-                        'Player "%s" Left, at %s', name, date.isoformat()
-                    )
+                    self.logger.info('Player "%s" Left, at %s', name, date.isoformat())
                     db.execute(
                         "UPDATE visitors SET end_datetime = :end_datetime WHERE name = :name AND world_id = :world_id AND end_datetime IS NULL",
                         {
-                            "end_datetime": default_tzinfo(datetime.now(), gettz()).isoformat(),
+                            "end_datetime": date,
                             "name": name,
                             "world_id": world_id,
                         },
