@@ -6,8 +6,8 @@ VSVersionInfo(
   ffi=FixedFileInfo(
     # filevers and prodvers should be always a tuple with four items: (1, 2, 3, 4)
     # Set not needed items to zero 0.
-    filevers=(0, 1, 1, 0),
-    prodvers=(0, 1, 1, 0),
+    filevers=(0, 1, 2, 0),
+    prodvers=(0, 1, 2, 0),
     # Contains a bitmask that specifies the valid bits 'flags'r
     mask=0x0,
     # Contains a bitmask that specifies the Boolean attributes of the file.
@@ -31,12 +31,12 @@ VSVersionInfo(
         '080904E4',
         [StringStruct('CompanyName', 'ticky'),
         StringStruct('FileDescription', 'Location data tracker tool for VRChat'),
-        StringStruct('FileVersion', '0.1.1'),
+        StringStruct('FileVersion', '0.1.2'),
         StringStruct('InternalName', 'vrctracker'),
         StringStruct('LegalCopyright', 'Jessica Stokes'),
         StringStruct('OriginalFilename', 'VRCTracker.exe'),
         StringStruct('ProductName', 'VRCTracker'),
-        StringStruct('ProductVersion', '0.1.1')])
+        StringStruct('ProductVersion', '0.1.2')])
       ]), 
     VarFileInfo([VarStruct('Translation', [2057, 1252])])
   ]
