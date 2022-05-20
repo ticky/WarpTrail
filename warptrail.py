@@ -89,9 +89,9 @@ class FileCreatedEventHandler(FileSystemEventHandler):
 VRCHAT_DIR = "%LOCALAPPDATA%\\..\\LocalLow\\VRChat\\VRChat"
 
 
-class VRCTrackerApp:
+class WarpTrailApp:
     def get_user_data_dir():
-        user_data_dir = AppDirs("VRCTracker", "ticky").user_data_dir
+        user_data_dir = AppDirs("WarpTrail", "ticky").user_data_dir
         if not os.path.isdir(user_data_dir):
             os.makedirs(user_data_dir, exist_ok=True)
         return user_data_dir
@@ -125,7 +125,7 @@ class VRCTrackerApp:
             return
 
         if database_path is None:
-            self.database_path = os.path.join(user_data_dir, "VRCTracker.db")
+            self.database_path = os.path.join(user_data_dir, "WarpTrail.db")
         else:
             self.database_path = database_path
 
@@ -144,15 +144,15 @@ class VRCTrackerApp:
 
         if APP_EMBEDDED:
             iconimage = Image.open(
-                os.path.join(sys._MEIPASS, "resources/vrctracker.ico")
+                os.path.join(sys._MEIPASS, "resources/warptrail.ico")
             )
         else:
-            iconimage = Image.open("resources/vrctracker.ico")
+            iconimage = Image.open("resources/warptrail.ico")
 
         self.icon = pystray.Icon(
-            "VRCTracker",
+            "WarpTrail",
             icon=iconimage,
-            title="VRCTracker",
+            title="WarpTrail",
             menu=pystray.Menu(
                 pystray.MenuItem("Export Location History...", self.on_export),
                 pystray.Menu.SEPARATOR,
@@ -178,7 +178,7 @@ class VRCTrackerApp:
 
             self.logger.info("History: {}".format(result))
 
-            output_file.write("# VRCTracker Location History\n\n")
+            output_file.write("# WarpTrail Location History\n\n")
             output_file.writelines(
                 """- [{}](https://vrch.at/{})  
   from {} until {}
@@ -253,7 +253,7 @@ class VRCTrackerApp:
     def on_export(self, icon, item):
         outfilename = filedialog.asksaveasfilename(
             title="Save VRChat Location History",
-            initialfile="VRCTracker History",
+            initialfile="WarpTrail History",
             filetypes=EXPORT_FILETYPES,
             defaultextension=EXPORT_FILETYPES,
         )
@@ -269,7 +269,7 @@ class VRCTrackerApp:
                 self.format_as(extension, output_file)
             except Exception as e:
                 messagebox.showerror(
-                    title="VRCTracker",
+                    title="WarpTrail",
                     message=str(e),
                 )
 
@@ -435,5 +435,5 @@ if __name__ == "__main__":
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    app = VRCTrackerApp()
+    app = WarpTrailApp()
     app.run()

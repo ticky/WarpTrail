@@ -4,7 +4,7 @@
 block_cipher = None
 
 
-a = Analysis(['vrctracker.py'],
+a = Analysis(['warptrail.py'],
              pathex=[],
              binaries=[],
              datas=[('resources\\*', 'resources')],
@@ -26,7 +26,7 @@ exe = EXE(pyz,
           a.zipfiles,
           a.datas,  
           [],
-          name='VRCTracker',
+          name='WarpTrail',
           debug=False,
           bootloader_ignore_signals=False,
           strip=False,
@@ -37,4 +37,4 @@ exe = EXE(pyz,
           disable_windowed_traceback=False,
           target_arch=None,
           codesign_identity=None,
-          entitlements_file=None , version='resources\\file_version_info.txt', icon='resources\\vrctracker.ico', manifest='resources\\vrctracker.exe.manifest')
+          entitlements_file=None , version='resources\\file_version_info.txt', icon='resources\\warptrail.ico', manifest='resources\\warptrail.exe.manifest')

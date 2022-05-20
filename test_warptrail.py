@@ -1,6 +1,6 @@
 import unittest
 
-from vrctracker import VRCTrackerApp
+from warptrail import WarpTrailApp
 
 import io
 import os
@@ -22,14 +22,14 @@ INSERT INTO "checkins" VALUES ('wrld_26120cd6-6097-406e-8a48-a3657cb60511', '202
 """
 
 
-class VRCTrackerTests(unittest.TestCase):
+class WarpTrailTests(unittest.TestCase):
     def test_get_user_data_dir(self):
-        self.assertTrue(os.path.isdir(VRCTrackerApp.get_user_data_dir()))
+        self.assertTrue(os.path.isdir(WarpTrailApp.get_user_data_dir()))
 
     @unittest.skipUnless(sys.platform.startswith("win"), "requires Windows")
     def test_get_vrchat_data_dir_windows(self):
         self.assertEqual(
-            VRCTrackerApp.get_vrchat_data_dir(),
+            WarpTrailApp.get_vrchat_data_dir(),
             os.path.abspath(
                 os.path.expandvars("%LOCALAPPDATA%\\..\\LocalLow\\VRChat\\VRChat")
             ),
@@ -38,7 +38,7 @@ class VRCTrackerTests(unittest.TestCase):
     def test_format_as_markdown(self):
         with TemporaryDirectory(ignore_cleanup_errors=True) as vrchat_data_dir:
             with TemporaryDirectory(ignore_cleanup_errors=True) as user_data_dir:
-                app = VRCTrackerApp(
+                app = WarpTrailApp(
                     user_data_dir=user_data_dir, vrchat_data_dir=vrchat_data_dir
                 )
                 db_conn = sqlite3.connect(app.database_path)
@@ -55,7 +55,7 @@ class VRCTrackerTests(unittest.TestCase):
 
                 self.assertEqual(
                     result,
-                    """# VRCTracker Location History
+                    """# WarpTrail Location History
 
 - [wrld_47c2a8bd-1f76-4e2c-94bb-5ae3b43e762e](https://vrch.at/wrld_47c2a8bd-1f76-4e2c-94bb-5ae3b43e762e)  
   from 05/04/2022, 21:44 until (unknown)
@@ -75,7 +75,7 @@ class VRCTrackerTests(unittest.TestCase):
     def test_format_as_text(self):
         with TemporaryDirectory(ignore_cleanup_errors=True) as vrchat_data_dir:
             with TemporaryDirectory(ignore_cleanup_errors=True) as user_data_dir:
-                app = VRCTrackerApp(
+                app = WarpTrailApp(
                     user_data_dir=user_data_dir, vrchat_data_dir=vrchat_data_dir
                 )
                 db_conn = sqlite3.connect(app.database_path)
@@ -104,7 +104,7 @@ Reflections 2 (https://vrch.at/wrld_26120cd6-6097-406e-8a48-a3657cb60511), from 
     def test_format_as_json(self):
         with TemporaryDirectory(ignore_cleanup_errors=True) as vrchat_data_dir:
             with TemporaryDirectory(ignore_cleanup_errors=True) as user_data_dir:
-                app = VRCTrackerApp(
+                app = WarpTrailApp(
                     user_data_dir=user_data_dir, vrchat_data_dir=vrchat_data_dir
                 )
                 db_conn = sqlite3.connect(app.database_path)
