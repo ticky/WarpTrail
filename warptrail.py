@@ -92,8 +92,20 @@ VRCHAT_DIR = "%LOCALAPPDATA%\\..\\LocalLow\\VRChat\\VRChat"
 class WarpTrailApp:
     def get_user_data_dir():
         user_data_dir = AppDirs("WarpTrail", "ticky").user_data_dir
+        old_user_data_dir = AppDirs("VRCTracker", "ticky").user_data_dir
+
         if not os.path.isdir(user_data_dir):
-            os.makedirs(user_data_dir, exist_ok=True)
+            # Migrate old data if it exists
+            if os.path.isdir(old_user_data_dir):
+                os.rename(old_user_data_dir, user_data_dir)
+                os.rename(
+                    os.path.join(user_data_dir, "VRCTracker.db"),
+                    os.path.join(user_data_dir, "WarpTrail.db"),
+                )
+
+            else:
+                os.makedirs(user_data_dir, exist_ok=True)
+
         return user_data_dir
 
     def get_vrchat_data_dir():
