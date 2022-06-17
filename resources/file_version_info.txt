@@ -32,10 +32,10 @@ VSVersionInfo(
         [StringStruct('CompanyName', 'ticky'),
         StringStruct('FileDescription', 'Location data tracker tool for VRChat'),
         StringStruct('FileVersion', '0.1.2'),
-        StringStruct('InternalName', 'vrctracker'),
+        StringStruct('InternalName', 'warptrail'),
         StringStruct('LegalCopyright', 'Jessica Stokes'),
-        StringStruct('OriginalFilename', 'VRCTracker.exe'),
-        StringStruct('ProductName', 'VRCTracker'),
+        StringStruct('OriginalFilename', 'WarpTrail.exe'),
+        StringStruct('ProductName', 'WarpTrail for VRChat'),
         StringStruct('ProductVersion', '0.1.2')])
       ]), 
     VarFileInfo([VarStruct('Translation', [2057, 1252])])
