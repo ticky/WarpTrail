@@ -7,12 +7,12 @@ import sqlite3
 import sys
 import re
 
-from appdirs import AppDirs
 from datetime import datetime
 from dateutil.parser import parse as parse_date
 from dateutil.utils import default_tzinfo
 from dateutil.tz import gettz
 from PIL import Image
+from platformdirs import PlatformDirs, user_pictures_dir
 import psutil
 import pystray
 from threading import Thread, Event as ThreadingEvent
@@ -53,7 +53,7 @@ CREATE UNIQUE INDEX visitors_world_id_name_time_unique ON visitors(world_id, nam
 EXPORT_FILETYPES = [("Markdown", ".md"), ("Plain Text", ".txt"), ("JSON Data", ".json")]
 
 
-class FileCreatedEventHandler(FileSystemEventHandler):
+class VRCAppDataEventHandler(FileSystemEventHandler):
     def __init__(self, app, logger=None):
         super().__init__()
 
@@ -66,7 +66,7 @@ class FileCreatedEventHandler(FileSystemEventHandler):
         if event.is_directory:
             return
 
-        relpath = os.path.relpath(event.src_path, self.app.vrchat_data_dir)
+        relpath = os.path.relpath(event.src_path, self.app.vrchat_appdata_dir)
 
         if not relpath.startswith("output_log"):
             return
@@ -86,13 +86,35 @@ class FileCreatedEventHandler(FileSystemEventHandler):
         ).start()
 
 
+class VRCScreenshotEventHandler(FileSystemEventHandler):
+    def __init__(self, app, logger=None):
+        super().__init__()
+
+        self.app = app
+        self.logger = logger or logging.root
+
+    def on_closed(self, event):
+        super().on_closed(event)
+
+        filename = os.path.basename(event.src_path)
+
+        if not filename.startswith("VRChat_"):
+            return
+
+        self.logger.info("VRChat screenshot file handle closed: %s", event.src_path)
+
+        Thread(
+            target=self.app.tag_screenshot_file, args=(event.src_path)
+        ).start()
+
+
 VRCHAT_DIR = "%LOCALAPPDATA%\\..\\LocalLow\\VRChat\\VRChat"
 
 
 class WarpTrailApp:
     def get_user_data_dir():
-        user_data_dir = AppDirs("WarpTrail", "ticky").user_data_dir
-        old_user_data_dir = AppDirs("VRCTracker", "ticky").user_data_dir
+        user_data_dir = PlatformDirs("WarpTrail", "ticky").user_data_dir
+        old_user_data_dir = PlatformDirs("VRCTracker", "ticky").user_data_dir
 
         if not os.path.isdir(user_data_dir):
             # Migrate old data if it exists
@@ -108,19 +130,23 @@ class WarpTrailApp:
 
         return user_data_dir
 
-    def get_vrchat_data_dir():
+    def get_vrchat_appdata_dir():
         expanded_dir = os.path.expandvars(VRCHAT_DIR)
 
         # Fallback for non-windows systems
         if expanded_dir == VRCHAT_DIR:
-            return AppDirs("VRChat", "VRChat").user_data_dir
+            return PlatformDirs("VRChat", "VRChat").user_data_dir
 
         return os.path.abspath(expanded_dir)
+
+    def get_vrchat_screenshot_dir():
+        return os.path.join(user_pictures_dir(), 'VRChat')
 
     def __init__(
         self,
         user_data_dir=get_user_data_dir(),
-        vrchat_data_dir=get_vrchat_data_dir(),
+        vrchat_appdata_dir=get_vrchat_appdata_dir(),
+        vrchat_screenshot_dir=get_vrchat_screenshot_dir(),
         database_path=None,
         logger=None,
     ):
@@ -128,13 +154,17 @@ class WarpTrailApp:
 
         self.logger.debug("user_data_dir: %s", user_data_dir)
 
-        self.vrchat_data_dir = vrchat_data_dir
+        self.vrchat_appdata_dir = vrchat_appdata_dir
 
-        self.logger.debug("vrchat_data_dir: %s", self.vrchat_data_dir)
+        self.logger.debug("vrchat_appdata_dir: %s", self.vrchat_appdata_dir)
 
-        if not os.path.exists(self.vrchat_data_dir):
-            print("{} could not be found".format(self.vrchat_data_dir))
+        if not os.path.exists(self.vrchat_appdata_dir):
+            print("{} could not be found".format(self.vrchat_appdata_dir))
             return
+        
+        self.vrchat_screenshot_dir = vrchat_screenshot_dir
+
+        self.logger.debug("vrchat_screenshot_dir: %s", self.vrchat_screenshot_dir)
 
         if database_path is None:
             self.database_path = os.path.join(user_data_dir, "WarpTrail.db")
@@ -296,9 +326,15 @@ class WarpTrailApp:
     def pystray_setup(self, icon):
         icon.visible = True
 
-        event_handler = FileCreatedEventHandler(self, self.logger)
         observer = Observer()
-        observer.schedule(event_handler, self.vrchat_data_dir)
+        observer.schedule(
+            VRCAppDataEventHandler(self, self.logger),
+            self.vrchat_appdata_dir,
+        )
+        observer.schedule(
+            VRCScreenshotEventHandler(self, self.logger),
+            self.vrchat_screenshot_dir,
+        )
         observer.start()
 
         try:
@@ -439,6 +475,15 @@ class WarpTrailApp:
 
             self.logger.info("Stopped processing %s", path)
 
+    def tag_screenshot_file(self, path):
+        # TODO:
+        # - Parse screenshot date & time from file name
+        # - Query database for current world at that time
+
+        db_conn = sqlite3.Connection(self.database_path)
+        db = db_conn.cursor()
+
+        # - Write some metadata to the file
 
 if __name__ == "__main__":
     logging.basicConfig(
